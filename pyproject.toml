@@ -3,7 +3,7 @@ name = "sip-forecaster"
 version = "0.1.0"
 description = "Day-ahead GB System Imbalance Price (SIP) forecaster"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 dependencies = [
     "numpy>=1.26",
     "pandas>=2.2",
