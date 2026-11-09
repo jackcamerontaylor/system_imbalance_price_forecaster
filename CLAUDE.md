@@ -20,6 +20,7 @@ Brief: `docs/BRIEF.md`. Data catalogue: `candidate_data/README.md`.
 ## Commands
 ```
 uv sync
+uv run python -m sip_forecaster backtest | forecast --day YYYY-MM-DD | holdout
 ```
 
 ## Memory files (keep these updated when asked / at the end of a work chunk)

@@ -12,5 +12,5 @@ ENV PATH="/app/.venv/bin:$PATH"
 
 COPY . .
 
-# TODO: point at the forecasting script once it exists (data mounted at /app/candidate_data)
-CMD ["python", "--version"]
+# data mounted at /app/candidate_data; build and run untested
+CMD ["python", "-m", "sip_forecaster", "--help"]

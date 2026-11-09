@@ -4,4 +4,5 @@ services:
     volumes:
       - ./candidate_data:/app/candidate_data:ro
       - ./outputs:/app/outputs
-    # TODO: command once the forecasting script exists
+    # untested; run `backtest` once before `forecast` (the 90% quantile needs its residuals)
+    command: ["python", "-m", "sip_forecaster", "forecast", "--day", "2026-09-30"]
