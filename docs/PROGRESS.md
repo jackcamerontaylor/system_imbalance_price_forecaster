@@ -11,7 +11,7 @@
   vintage arrives ~08:48 D-1 (only ~21% of periods at 07:00, ~99% at 09:00). `margin_half_hourly` full-day
   vintage arrives ~12:06 D-1 (after both cutoffs) and only exists from 2025-10-09, so it is of little use.
 - Missing `received_at`: embedded wind/solar and margin_daily (use `issued_at`).
-- Details in `notebooks/01_data_audit.ipynb`.
+- Details in `notebooks/01_data/01_data_audit.ipynb`.
 - Next: 02 price EDA (shape, spikes, drift per D-002).
 
 ## 2026-11-09 - hold-out set (D-003) and 02 price EDA
@@ -37,7 +37,7 @@
 
 ## 2026-11-09 - 05 feature table
 - Decisions D-004 (three tail metrics, hit rate as headline), D-005 (combined vs split 07/09), D-006 (several model families and targets) logged.
-- `notebooks/05_feature_table.ipynb` builds `outputs/feature_table_dev.parquet` (git-ignored): 64,702 rows = 32,351 periods x 2 cutoffs, 31 features, targets `price` and `y_dev` (= price - 28-day same-period median). Dev days only.
+- `notebooks/02_features_and_evaluation/05_feature_table.ipynb` builds `outputs/feature_table_dev.parquet` (git-ignored): 64,702 rows = 32,351 periods x 2 cutoffs, 31 features, targets `price` and `y_dev` (= price - 28-day same-period median). Dev days only.
 - Leak checks pass, incl. a deliberately shifted cutoff that is caught, and brute-force re-derivation on random rows.
 - 07:00 demand missing for 79% of rows; wind features overlap (0.94-0.997).
 - Next: fold definitions, then models and targets (D-005, D-006), scored on tail metrics (D-004).
@@ -135,3 +135,24 @@
 - Found look-ahead error in notebook 05 for day 2024-10-01 only (`level7`, `level28`, first-row slice); no model row affected; fixed in the package. Truncation look-ahead test (24 day/cutoff combinations) passes.
 - D-009 logged: final procedure and the hold-out protocol (refit primary, frozen secondary) fixed before scoring. Hold-out not yet run.
 - Next: score the hold-out once (`python -m sip_forecaster holdout`), then write-up.
+
+## 2026-11-09 - FINAL HOLD-OUT (UK days 2026-08-06 .. 2026-09-30, 56 days, scored once with the procedure of D-009, committed as d8562c0)
+Hold-out median price 134.9 (dev blocks 97-118). Baseline = 28-day same-period median and its empirical 10%/90% quantiles. Refit protocol (primary):
+
+| | MAE | RMSE | bias | top-8 hit | bottom-8 hit | pinball 10% | pinball 90% | below q10 | above q90 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 09:00 model | 44.15 | 55.44 | -2.1 | 0.471 | 0.395 | 9.45 | 10.48 | 18.6% | 23.7% |
+| 07:00 model | 44.69 | 56.22 | -2.8 | 0.478 | 0.402 | 10.04 | 10.77 | 18.8% | 23.8% |
+| baseline | 48.42 | 62.58 | +0.5 | 0.464 | 0.379 | 11.42 | 10.19 | 12.9% | 20.8% |
+
+Frozen (one fit on dev only): 09:00 MAE 44.07, hit 0.471/0.400, pinball 9.22/10.62; 07:00 MAE 44.58, hit 0.471/0.388, pinball 10.01/10.93.
+- Point accuracy holds and is larger than in development: MAE -4.3 (09:00) / -3.7 (07:00) vs baseline, better on 41 / 38 of 56 days (per-day paired -4.26 +/- 1.01 and -3.73 +/- 0.99), RMSE -7.1 / -6.4.
+- Ranking gain is small and not distinguishable from zero: top-8 +0.007 +/- 0.013, bottom-8 +0.016 +/- 0.025 (09:00; per day), +0.013 / +0.022 at 07:00 (dev: +0.033/+0.046 and +0.021/+0.033). In block 1 (2026-09-03..30) the 09:00 bottom-8 hit is below the baseline (0.406 vs 0.415).
+- 10% quantile better than baseline (pinball 9.45 vs 11.42 at 09:00), but 90% quantile worse (10.48 vs 10.19), and both intervals under-cover: actual below q10 18.6%, above q90 23.7% (nominal 10% each; baseline 12.9% / 20.8%). The upper tail again is the weak part; prices were higher and more volatile than in development.
+- Per-block bias is large in both model and baseline (block 0: -12; block 1: +8 / +13), i.e. the price level moved within the hold-out; the level model only partly follows it.
+- Caveats: 56 days, two blocks; days are autocorrelated so per-day standard errors are optimistic; the procedure was not changed after seeing results.
+
+## 2026-11-09 - write-up and tidy-up
+- `docs/REPORT.md` written (task, measurement, what was tried by notebook, final procedure, dev and hold-out results, limits, next steps); README updated.
+- Notebook 05 corrected (first-row slice for `level7`/`level28`, 2024-10-01 only; no model row affected) and all notebooks 01-20 re-executed top to bottom in order; package linted (ruff) and the commands re-run.
+- State: project complete for the stated scope; nothing pushed.

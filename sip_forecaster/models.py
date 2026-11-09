@@ -28,8 +28,17 @@ ANOM = ["demand_anom", "wind_anom", "emb_wind_anom", "emb_solar_anom"]
 HIST = ["med28_same", "med7_same", "d2_same", "level24h", "level7", "level28", "level_gap"]
 MGN = ["mgn_min_demand", "mgn_surplus", "mgn_constrained", "mgn_gen_avail", "mgn_ic_import"]
 OTH = ["bank_holiday", "doy_sin", "doy_cos", "clock_change_day"]
-GBM_EXTRA = ["wind_total_mw", "demand_age_h", "wind_age_h", "emb_age_h", "demand_rev", "wind_rev", "emb_wind_rev",
-             "emb_solar_rev", "is_weekend"]
+GBM_EXTRA = [
+    "wind_total_mw",
+    "demand_age_h",
+    "wind_age_h",
+    "emb_age_h",
+    "demand_rev",
+    "wind_rev",
+    "emb_wind_rev",
+    "emb_solar_rev",
+    "is_weekend",
+]
 DEMAND_COLS = {"demand_mw", "demand_age_h", "demand_rev", "demand_anom"}
 REV_COLS = {"demand_rev", "wind_rev", "emb_wind_rev", "emb_solar_rev"}
 DROP = {9: set(), 7: DEMAND_COLS | REV_COLS}
@@ -37,7 +46,13 @@ MIN_DAY_ROWS = 40
 
 
 def gbm_cols(cutoff):
-    cols = ["hour_frac", "weekday", "bank_holiday", "doy_sin", "doy_cos", "clock_change_day"] + ABS + MGN + GBM_EXTRA + HIST
+    cols = (
+        ["hour_frac", "weekday", "bank_holiday", "doy_sin", "doy_cos", "clock_change_day"]
+        + ABS
+        + MGN
+        + GBM_EXTRA
+        + HIST
+    )
     return [c for c in dict.fromkeys(cols) if c not in DROP[cutoff]]
 
 
@@ -50,23 +65,58 @@ def _huber(cutoff):
     lin = HIST + MGN + OTH
     parts = []
     if weather:
-        parts.append(("spl", make_pipeline(SimpleImputer(strategy="median"), SplineTransformer(n_knots=6, degree=3, extrapolation="linear"),
-                                           StandardScaler()), weather))
-    parts += [("hour", SplineTransformer(knots=np.linspace(0, 24, 13).reshape(-1, 1), degree=3, extrapolation="periodic"), ["hour_frac"]),
-              ("lin", make_pipeline(SimpleImputer(strategy="median"), StandardScaler()), lin),
-              ("wd", OneHotEncoder(handle_unknown="ignore"), ["weekday"])]
+        parts.append(
+            (
+                "spl",
+                make_pipeline(
+                    SimpleImputer(strategy="median"),
+                    SplineTransformer(n_knots=6, degree=3, extrapolation="linear"),
+                    StandardScaler(),
+                ),
+                weather,
+            )
+        )
+    parts += [
+        (
+            "hour",
+            SplineTransformer(
+                knots=np.linspace(0, 24, 13).reshape(-1, 1), degree=3, extrapolation="periodic"
+            ),
+            ["hour_frac"],
+        ),
+        ("lin", make_pipeline(SimpleImputer(strategy="median"), StandardScaler()), lin),
+        ("wd", OneHotEncoder(handle_unknown="ignore"), ["weekday"]),
+    ]
     cols = weather + ["hour_frac"] + lin + ["weekday"]
-    return Pipeline([("pre", ColumnTransformer(parts)), ("est", HuberRegressor(alpha=30, epsilon=1.35, max_iter=300))]), cols
+    return Pipeline(
+        [
+            ("pre", ColumnTransformer(parts)),
+            ("est", HuberRegressor(alpha=30, epsilon=1.35, max_iter=300)),
+        ]
+    ), cols
 
 
 def _gbm(loss="absolute_error", quantile=None):
     kw = {"quantile": quantile} if quantile is not None else {}
-    return HistGradientBoostingRegressor(loss=loss, max_iter=300, learning_rate=0.05, max_leaf_nodes=15, min_samples_leaf=100,
-                                         l2_regularization=1.0, early_stopping=False, random_state=0, **kw)
+    return HistGradientBoostingRegressor(
+        loss=loss,
+        max_iter=300,
+        learning_rate=0.05,
+        max_leaf_nodes=15,
+        min_samples_leaf=100,
+        l2_regularization=1.0,
+        early_stopping=False,
+        random_state=0,
+        **kw,
+    )
 
 
 def _level_model():
-    return make_pipeline(SimpleImputer(strategy="median"), StandardScaler(), HuberRegressor(alpha=10, epsilon=1.35, max_iter=300))
+    return make_pipeline(
+        SimpleImputer(strategy="median"),
+        StandardScaler(),
+        HuberRegressor(alpha=10, epsilon=1.35, max_iter=300),
+    )
 
 
 def daily_table(F: pd.DataFrame) -> pd.DataFrame:
@@ -107,7 +157,9 @@ def fit(F: pd.DataFrame, cutoff: int, train_days) -> Fitted:
     dtr = daily_table(F)
     fitd = dtr[dtr["target"].notna()]
     lm = _level_model().fit(fitd[lc], fitd["target"])
-    lt_train = pd.Series(lm.predict(dtr[lc]), index=dtr.index)                      # in-sample fitted level, all training days
+    lt_train = pd.Series(
+        lm.predict(dtr[lc]), index=dtr.index
+    )  # in-sample fitted level, all training days
     q10 = _gbm("quantile", 0.1).fit(tr[gc], ydev - tr["day"].map(lt_train).fillna(0.0))
     return Fitted(cutoff, hub, hc, gbm, gc, q10, lm, lc)
 

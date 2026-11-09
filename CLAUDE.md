@@ -14,6 +14,7 @@ Brief: `docs/BRIEF.md`. Data catalogue: `candidate_data/README.md`.
 - Raw timestamps are UTC; "day" and run times are UK local (`Europe/London`). Clock-change days
   have 46/50 periods.
 - Avoid look-ahead: only use information available at the run cutoff.
+- The hold-out (D-003) was scored on 2026-11-09 (see `docs/REPORT.md`). Do not use it for further model selection or tuning.
 - Never commit CSVs (git-ignored, >100 MB).
 - Do not mention hiring/interview context anywhere in the repo (README, docs, commits).
 

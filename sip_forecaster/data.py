@@ -8,17 +8,38 @@ UK_TZ = "Europe/London"
 DATA_DIR = Path(__file__).resolve().parent.parent / "candidate_data"
 OUT_DIR = Path(__file__).resolve().parent.parent / "outputs"
 
-TABLES = ["imbalance_price", "demand_forecast_elexon", "wind_forecast_elexon",
-          "wind_solar_forecast_embedded", "margin_daily"]
+TABLES = [
+    "imbalance_price",
+    "demand_forecast_elexon",
+    "wind_forecast_elexon",
+    "wind_solar_forecast_embedded",
+    "margin_daily",
+]
 
 # Final hold-out (D-003): UK days 2026-08-06 .. 2026-09-30. Exploration and model selection used only earlier days.
 TEST_START_DAY = pd.Timestamp("2026-08-06")
 
 # England and Wales bank holidays, listed by hand (no extra dependency); they cover the data range.
-BANK_HOLIDAYS = pd.to_datetime([
-    "2024-12-25", "2024-12-26",
-    "2025-01-01", "2025-04-18", "2025-04-21", "2025-05-05", "2025-05-26", "2025-08-25", "2025-12-25", "2025-12-26",
-    "2026-01-01", "2026-04-03", "2026-04-06", "2026-05-04", "2026-05-25", "2026-08-31"])
+BANK_HOLIDAYS = pd.to_datetime(
+    [
+        "2024-12-25",
+        "2024-12-26",
+        "2025-01-01",
+        "2025-04-18",
+        "2025-04-21",
+        "2025-05-05",
+        "2025-05-26",
+        "2025-08-25",
+        "2025-12-25",
+        "2025-12-26",
+        "2026-01-01",
+        "2026-04-03",
+        "2026-04-06",
+        "2026-05-04",
+        "2026-05-25",
+        "2026-08-31",
+    ]
+)
 
 
 def load_tables(data_dir: Path = DATA_DIR) -> dict[str, pd.DataFrame]:

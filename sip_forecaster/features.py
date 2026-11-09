@@ -13,16 +13,29 @@ import pandas as pd
 from .data import BANK_HOLIDAYS, UK_TZ, day_grid, to_uk, uk_day
 
 CUTOFF_HOURS = (7, 9)
-ANOM_SRC = {"demand_mw": "demand_anom", "wind_mw": "wind_anom", "emb_wind_mw": "emb_wind_anom",
-            "emb_solar_mw": "emb_solar_anom", "wind_total_mw": "wind_total_anom"}
-MARGIN_COLS = {"minimum_demand_forecast_mw": "mgn_min_demand", "national_surplus_mw": "mgn_surplus",
-               "constrained_plant_mw": "mgn_constrained", "generator_availability_mw": "mgn_gen_avail",
-               "max_interconnector_import_mw": "mgn_ic_import"}
+ANOM_SRC = {
+    "demand_mw": "demand_anom",
+    "wind_mw": "wind_anom",
+    "emb_wind_mw": "emb_wind_anom",
+    "emb_solar_mw": "emb_solar_anom",
+    "wind_total_mw": "wind_total_anom",
+}
+MARGIN_COLS = {
+    "minimum_demand_forecast_mw": "mgn_min_demand",
+    "national_surplus_mw": "mgn_surplus",
+    "constrained_plant_mw": "mgn_constrained",
+    "generator_availability_mw": "mgn_gen_avail",
+    "max_interconnector_import_mw": "mgn_ic_import",
+}
 
 
 def cutoff_utc(day, hour):
     d1 = pd.Timestamp(day) - pd.Timedelta(days=1)
-    return (d1 + pd.Timedelta(hours=hour)).tz_localize(UK_TZ, ambiguous=False, nonexistent="shift_forward").tz_convert("UTC")
+    return (
+        (d1 + pd.Timedelta(hours=hour))
+        .tz_localize(UK_TZ, ambiguous=False, nonexistent="shift_forward")
+        .tz_convert("UTC")
+    )
 
 
 def _pit_snapshot(df, cut_map, value_cols):
@@ -30,7 +43,11 @@ def _pit_snapshot(df, cut_map, value_cols):
     df = df.copy()
     df["avail"] = df["received_at"].fillna(df["issued_at"])
     df["cutoff"] = uk_day(df["period_start"]).map(cut_map)
-    ok = df[df["avail"] <= df["cutoff"]].sort_values(["period_start", "avail"]).drop_duplicates("period_start", keep="last")
+    ok = (
+        df[df["avail"] <= df["cutoff"]]
+        .sort_values(["period_start", "avail"])
+        .drop_duplicates("period_start", keep="last")
+    )
     ok["age_h"] = (ok["cutoff"] - ok["avail"]).dt.total_seconds() / 3600
     return ok.set_index("period_start")[value_cols + ["avail", "age_h"]]
 
@@ -47,15 +64,23 @@ def build_features(tables: dict[str, pd.DataFrame], days: pd.DatetimeIndex) -> p
     cut_map = {h: pd.Series({d: cutoff_utc(d, h) for d in days}) for h in CUTOFF_HOURS}
 
     price_all = tables["imbalance_price"].set_index("period_start")["price_gbp_per_mwh"]
-    price = price_all.reindex(grid)                                   # label for the target day (NaN if unknown)
+    price = price_all.reindex(grid)  # label for the target day (NaN if unknown)
 
     # --- forecast snapshots on the half-hour grid
-    spec = {"demand": ("demand_forecast_elexon", ["demand_mw"]),
-            "wind": ("wind_forecast_elexon", ["wind_mw"]),
-            "emb": ("wind_solar_forecast_embedded", ["embedded_wind_mw", "embedded_solar_mw"])}
+    spec = {
+        "demand": ("demand_forecast_elexon", ["demand_mw"]),
+        "wind": ("wind_forecast_elexon", ["wind_mw"]),
+        "emb": ("wind_solar_forecast_embedded", ["embedded_wind_mw", "embedded_solar_mw"]),
+    }
     lo, hi = grid.min() - pd.Timedelta(hours=2), grid.max() + pd.Timedelta(hours=2)
-    raw = {t: tables[t][(tables[t]["period_start"] >= lo) & (tables[t]["period_start"] <= hi)] for t, _ in spec.values()}
-    snap = {h: {k: _pit_snapshot(raw[t], cut_map[h], c) for k, (t, c) in spec.items()} for h in CUTOFF_HOURS}
+    raw = {
+        t: tables[t][(tables[t]["period_start"] >= lo) & (tables[t]["period_start"] <= hi)]
+        for t, _ in spec.values()
+    }
+    snap = {
+        h: {k: _pit_snapshot(raw[t], cut_map[h], c) for k, (t, c) in spec.items()}
+        for h in CUTOFF_HOURS
+    }
 
     def on_grid(s, floor=False):
         x = s.reindex(grid.floor("h") if floor else grid)
@@ -74,7 +99,14 @@ def build_features(tables: dict[str, pd.DataFrame], days: pd.DatetimeIndex) -> p
         f["demand_age_h"] = on_grid(s["demand"]["age_h"])
         f["wind_age_h"] = on_grid(s["wind"]["age_h"], floor=True)
         f["emb_age_h"] = on_grid(s["emb"]["age_h"])
-        avail = pd.concat([on_grid(s["demand"]["avail"]), on_grid(s["wind"]["avail"], floor=True), on_grid(s["emb"]["avail"])], axis=1)
+        avail = pd.concat(
+            [
+                on_grid(s["demand"]["avail"]),
+                on_grid(s["wind"]["avail"], floor=True),
+                on_grid(s["emb"]["avail"]),
+            ],
+            axis=1,
+        )
         f["_avail_max"] = avail.max(axis=1)
         FB[h] = f
     for c in ["demand_mw", "wind_mw", "emb_wind_mw", "emb_solar_mw"]:
@@ -90,18 +122,34 @@ def build_features(tables: dict[str, pd.DataFrame], days: pd.DatetimeIndex) -> p
     doy = loc.dt.day_of_year
     cal["doy_sin"] = np.sin(2 * np.pi * doy / 365.25)
     cal["doy_cos"] = np.cos(2 * np.pi * doy / 365.25)
-    cal["clock_change_day"] = (day_of.map(loc.groupby(day_of).apply(lambda s: s.dt.strftime("%z").nunique())) > 1).astype(int).to_numpy()
+    cal["clock_change_day"] = (
+        (day_of.map(loc.groupby(day_of).apply(lambda s: s.dt.strftime("%z").nunique())) > 1)
+        .astype(int)
+        .to_numpy()
+    )
 
     # --- price history (prices of D-2 and earlier; level24h: the 24 h ending 1 h before the cutoff)
     pidx = price_all.index
     pday = uk_day(pidx.to_series())
-    df = pd.DataFrame({"price": price_all.to_numpy(), "day": pday.to_numpy(), "hhmm": to_uk(pidx.to_series()).dt.strftime("%H:%M").to_numpy()})
+    df = pd.DataFrame(
+        {
+            "price": price_all.to_numpy(),
+            "day": pday.to_numpy(),
+            "hhmm": to_uk(pidx.to_series()).dt.strftime("%H:%M").to_numpy(),
+        }
+    )
     df["occ"] = df.groupby(["day", "hhmm"]).cumcount()
     wide = df.pivot(index="day", columns=["hhmm", "occ"], values="price")
-    wide = wide.reindex(pd.date_range(min(wide.index.min(), days.min()), max(wide.index.max(), days.max()), freq="D"))
-    known = wide.shift(2)                                             # row D shows the prices of D-2
+    wide = wide.reindex(
+        pd.date_range(
+            min(wide.index.min(), days.min()), max(wide.index.max(), days.max()), freq="D"
+        )
+    )
+    known = wide.shift(2)  # row D shows the prices of D-2
 
-    gdf = pd.DataFrame({"day": day_of.to_numpy(), "hhmm": loc.dt.strftime("%H:%M").to_numpy()}, index=grid)
+    gdf = pd.DataFrame(
+        {"day": day_of.to_numpy(), "hhmm": loc.dt.strftime("%H:%M").to_numpy()}, index=grid
+    )
     gdf["occ"] = gdf.groupby(["day", "hhmm"]).cumcount()
 
     def to_long(Fm):
@@ -116,12 +164,14 @@ def build_features(tables: dict[str, pd.DataFrame], days: pd.DatetimeIndex) -> p
     PH["d2_same"] = to_long(known)
     PH["med7_same"] = to_long(known.rolling(7, min_periods=4).median())
     PH["med28_same"] = to_long(known.rolling(28, min_periods=14).median())
-    PH["q10_28"] = to_long(known.rolling(28, min_periods=14).quantile(0.1))      # baseline quantiles (for comparison only)
+    PH["q10_28"] = to_long(
+        known.rolling(28, min_periods=14).quantile(0.1)
+    )  # baseline quantiles (for comparison only)
     PH["q90_28"] = to_long(known.rolling(28, min_periods=14).quantile(0.9))
     vals = wide.to_numpy()
 
     def flat_median(i, n):
-        a, b = max(0, i - 1 - n), max(0, i - 1)                       # rows D-n-1 .. D-2 (empty for the first row)
+        a, b = max(0, i - 1 - n), max(0, i - 1)  # rows D-n-1 .. D-2 (empty for the first row)
         v = vals[a:b].ravel()
         return np.nanmedian(v) if np.isfinite(v).sum() >= 24 else np.nan
 
@@ -132,6 +182,7 @@ def build_features(tables: dict[str, pd.DataFrame], days: pd.DatetimeIndex) -> p
     PH["level28"] = day_of.map(lvl28).to_numpy()
 
     pv = price_all
+
     def level24(hour):
         lv, last = {}, {}
         t = pv.index
@@ -148,8 +199,15 @@ def build_features(tables: dict[str, pd.DataFrame], days: pd.DatetimeIndex) -> p
     mg = tables["margin_daily"].copy()
     mg["day"] = pd.to_datetime(mg["day"])
     mg["issued_day"] = uk_day(mg["issued_at"])
-    mg = mg[(mg["day"] - mg["issued_day"]).dt.days >= 2].sort_values("issued_day").drop_duplicates("day", keep="last").set_index("day")
-    MG = pd.DataFrame({new: day_of.map(mg[old]).to_numpy() for old, new in MARGIN_COLS.items()}, index=grid)
+    mg = (
+        mg[(mg["day"] - mg["issued_day"]).dt.days >= 2]
+        .sort_values("issued_day")
+        .drop_duplicates("day", keep="last")
+        .set_index("day")
+    )
+    MG = pd.DataFrame(
+        {new: day_of.map(mg[old]).to_numpy() for old, new in MARGIN_COLS.items()}, index=grid
+    )
     MG_issued = day_of.map(mg["issued_day"]).to_numpy()
 
     # --- assemble
@@ -166,7 +224,13 @@ def build_features(tables: dict[str, pd.DataFrame], days: pd.DatetimeIndex) -> p
         t["price"] = price
         t["y_dev"] = t["price"] - t["med28_same"]
         parts.append(t)
-    T = pd.concat(parts).rename_axis("period_start").reset_index().sort_values(["period_start", "cutoff_hour"]).reset_index(drop=True)
+    T = (
+        pd.concat(parts)
+        .rename_axis("period_start")
+        .reset_index()
+        .sort_values(["period_start", "cutoff_hour"])
+        .reset_index(drop=True)
+    )
 
     # --- anomaly features: forecast minus the mean of the same clock time's PIT forecasts over D-29..D-2, same cutoff
     T["_hhmm"] = to_uk(T["period_start"]).dt.strftime("%H:%M")

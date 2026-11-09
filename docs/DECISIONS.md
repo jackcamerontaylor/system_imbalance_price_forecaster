@@ -68,3 +68,8 @@ the 17 dev blocks plus earlier hold-out blocks) and **frozen** (one fit on devel
 hit rate), against the 28-day median and its empirical quantiles. No change to the procedure after seeing the results; results are reported
 as they come out. The q10-from-Q2 / q90-from-offset combination was not pre-specified in the development phase (notebook 17), so the
 hold-out is its first clean test.
+
+**D-009 outcome (2026-11-09)** - hold-out scored once with the procedure above, unchanged. 09:00: MAE 44.15 against the baseline 48.42,
+top-8 / bottom-8 hit 0.471 / 0.395 against 0.464 / 0.379 (not distinguishable from zero), 10% pinball 9.45 against 11.42, 90% pinball
+10.48 against 10.19; intervals too narrow (18.6% below q10, 23.7% above q90). Details and caveats in `docs/REPORT.md`. The hold-out is now
+used; any later change cannot be validated on it.

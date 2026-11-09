@@ -16,11 +16,15 @@ def make_folds(days, block=28, n_folds=17, gap=1, train_window=None):
     days = pd.DatetimeIndex(sorted(set(days)))
     folds = []
     for k in range(n_folds):
-        hi = len(days) - (n_folds - 1 - k) * block          # exclusive end of this block
+        hi = len(days) - (n_folds - 1 - k) * block  # exclusive end of this block
         lo = hi - block
         val = days[lo:hi]
-        train_end = lo - gap                                  # exclusive index
-        train = days[:train_end] if train_window is None else days[max(0, train_end - train_window):train_end]
+        train_end = lo - gap  # exclusive index
+        train = (
+            days[:train_end]
+            if train_window is None
+            else days[max(0, train_end - train_window) : train_end]
+        )
         folds.append({"fold": k, "train_days": train, "val_days": val})
     return folds
 
@@ -35,8 +39,13 @@ def _hit_rates(day, y, p, k=8, min_periods=40):
         if len(yy) < min_periods or len(np.unique(pp)) < 5:
             continue
         n += 1
-        top.append(len(set(np.argsort(-pp, kind="stable")[:k]) & set(np.argsort(-yy, kind="stable")[:k])) / k)
-        bot.append(len(set(np.argsort(pp, kind="stable")[:k]) & set(np.argsort(yy, kind="stable")[:k])) / k)
+        top.append(
+            len(set(np.argsort(-pp, kind="stable")[:k]) & set(np.argsort(-yy, kind="stable")[:k]))
+            / k
+        )
+        bot.append(
+            len(set(np.argsort(pp, kind="stable")[:k]) & set(np.argsort(yy, kind="stable")[:k])) / k
+        )
     return (np.mean(top) if n else np.nan, np.mean(bot) if n else np.nan, n)
 
 
@@ -57,8 +66,14 @@ def score(d, pred="pred", q10=None, q90=None):
     y, p = d["price"].to_numpy(), d[pred].to_numpy()
     e = p - y
     lo, hi = np.quantile(y, [0.1, 0.9])
-    out = {"n": len(d), "MAE": np.abs(e).mean(), "RMSE": np.sqrt((e ** 2).mean()), "bias": e.mean(),
-           "MAE_top10": np.abs(e[y >= hi]).mean(), "MAE_bot10": np.abs(e[y <= lo]).mean()}
+    out = {
+        "n": len(d),
+        "MAE": np.abs(e).mean(),
+        "RMSE": np.sqrt((e**2).mean()),
+        "bias": e.mean(),
+        "MAE_top10": np.abs(e[y >= hi]).mean(),
+        "MAE_bot10": np.abs(e[y <= lo]).mean(),
+    }
     out["hit_top8"], out["hit_bot8"], out["hit_days"] = _hit_rates(d["day"], y, p)
     if q10 is not None:
         out["pinball10"] = pinball(d["price"], d[q10], 0.1)
