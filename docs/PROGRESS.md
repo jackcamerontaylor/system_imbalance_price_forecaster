@@ -13,3 +13,10 @@
 - Missing `received_at`: embedded wind/solar and margin_daily (use `issued_at`).
 - Details in `notebooks/01_data_audit.ipynb`.
 - Next: 02 price EDA (shape, spikes, drift per D-002).
+
+## 2026-11-09 - hold-out set (D-003) and 02 price EDA
+- Last 8 weeks held out. 02 now reads development data only; findings in the notebook were updated to match.
+- Development-set summary: median £88, 5.5% negative, fat right tail, evening peak and midday negatives,
+  level up from about £66-76 (mid/late 2025) to about £113 (Jul 2026), weak own-price persistence
+  (corr 0.16 at 1 day). "Same period yesterday" baseline not available at cutoff; use D-2.
+- Next: 03 point-in-time features.

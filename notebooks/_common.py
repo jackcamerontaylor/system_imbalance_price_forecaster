@@ -34,3 +34,13 @@ def to_uk(ts: pd.Series) -> pd.Series:
 def settlement_day(period_start: pd.Series) -> pd.Series:
     """UK local calendar date of each half-hour period (the 'day D' of the task)."""
     return to_uk(period_start).dt.date
+
+
+# Final hold-out: the last 8 weeks of price data (UK days 2026-08-06 .. 2026-09-30).
+# Exploration and model selection use only days before this. Touch the test set once, at the end.
+TEST_START = pd.Timestamp("2026-08-06", tz=UK_TZ)
+
+
+def dev_only(df: pd.DataFrame, col: str = "period_start") -> pd.DataFrame:
+    """Keep rows whose target period falls before the hold-out."""
+    return df[df[col] < TEST_START.tz_convert("UTC")]
