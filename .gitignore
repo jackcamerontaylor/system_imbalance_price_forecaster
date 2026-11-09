@@ -8,3 +8,12 @@ __pycache__/
 venv/
 .ipynb_checkpoints/
 .env
+
+# Outputs / tooling
+outputs/*
+!outputs/.gitkeep
+.pytest_cache/
+.ruff_cache/
+
+# Notebooks
+.ipynb_checkpoints/
