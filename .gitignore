@@ -1,0 +1,10 @@
+# Data: CSVs duplicate the Parquet files and exceed GitHub size limits
+candidate_data/*.csv
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.ipynb_checkpoints/
+.env
