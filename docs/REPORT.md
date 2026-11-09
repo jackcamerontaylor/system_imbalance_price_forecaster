@@ -22,7 +22,8 @@ What the audit found (01, 02, 03):
 ## 2. How results were measured
 
 - **No look-ahead.** Every feature uses only information available at the cutoff (latest vintage with `received_at`, else `issued_at`, at or before the
-  cutoff; prices of D-2 and earlier plus the 24 hours ending one hour before the cutoff; margin publications dated D-2 or earlier). This was tested in
+  cutoff; prices of D-2 and earlier plus the half-hours starting 25 to 1 hours before the cutoff, the latest ending 30 minutes before it; margin
+  publications dated D-2 or earlier). This was tested in
   the notebooks (05, deliberately wrong cutoffs are caught) and again for the production code by rebuilding features from tables truncated at the cutoff (20).
 - **Hold-out (D-003).** The last 8 weeks (UK days 2026-08-06 to 2026-09-30, 56 days) were not used for any exploration or model selection, and were
   scored once, at the end.
@@ -41,15 +42,15 @@ What the audit found (01, 02, 03):
 | --- | --- | --- |
 | 04 | Which simple reference is best? | 28-day same-period median (MAE 31.4, RMSE 63.5, 659 dev days). Longer look-back beats recency. It already ranks the day's periods better than chance (picks 45% of the top-8 and 33% of the bottom-8). |
 | 06 | Fold design and metrics | 17 folds; metrics tested on oracle / reversed / noise / constant forecasts. Baseline on the folds: MAE 30.2, RMSE 42.2, hit 0.462 / 0.322. The baseline quantiles under-cover (13.1% of prices below the 10% quantile, 13.8% above the 90%). |
-| 07-09 | Gradient boosting (GBM) on forecasts plus calendar plus history | Gain over the baseline: MAE -1.4 to -1.6, RMSE -3.1 to -3.4, hit +0.03 / +0.04, stable across 12 settings. History features alone are worse than the baseline (overfitting). A deviation-from-baseline target is no better than the direct price. The GBM here is deterministic, so seeds do not matter. |
+| 07-09 | Gradient boosting (GBM) on forecasts plus calendar plus history | Gain over the baseline: MAE -1.4 to -1.7, RMSE -3.1 to -3.5, hit +0.03 / +0.04, stable across 12 settings. History features alone are worse than the baseline (overfitting). A deviation-from-baseline target is no better than the direct price. The GBM here is deterministic, so seeds do not matter. |
 | 10-13 | Why do models under-forecast when prices rise? | The validation mean is below the median, so this is a genuine under-forecast, concentrated in the recent high-price folds, and it comes from the price-history terms and absolute weather levels (which carry seasonal information the reference already has), not from the reference. Huber loss matches the GBM; squared-error ridge does not beat the baseline. |
 | 14 | Anomaly features (forecast minus its own D-29..D-2 mean) | They fix the level in recent folds but lose the within-day ranking gain. |
 | 15 | Two-part model: daily level from anomalies, ranking from absolute inputs | A daily level model works out of sample (correlation 0.67 with the day's mean deviation from the reference; it removes about 40% of that deviation's variance). Keeping the ordering of the absolute-input model and replacing its level gives the best result on all metrics together (MAE -2.06 against the baseline, hit +0.032 / +0.049). |
 | 16 | 07:00 against 09:00, and one combined or two separate models | The difference between the cutoffs is almost entirely the demand forecast. A combined model with a cutoff indicator is not better than two separate ones, so two separate models are used (07:00 without demand inputs). |
 | 17 | Quantile forecasts | The 10% quantile is predictable (pinball -2.4 against the baseline); the 90% quantile is not, and direct quantile GBMs under-cover the upper tail in the recent folds. Ranking by a quantile does not beat ranking by the point forecast. |
-| 18 | Which model family, or a blend | An equal-weight average of Huber and GBM shapes is best or tied at both cutoffs (09:00 MAE -2.23, 07:00 -1.85 against the baseline). |
+| 18 | Which model family, or a blend | An equal-weight average of Huber and GBM shapes is best or tied at both cutoffs (09:00 MAE -2.24, 07:00 -1.83 against the baseline). |
 | 19 | Does feature selection inside each fold help? | No (differences of about one standard error or less). The apparent advantage of a reduced feature set found in 09 did not survive an honest selection. |
-| 20 | Does the production code reproduce the notebooks? | Yes (point forecast to 0.001 £/MWh, metrics to three decimals); no look-ahead (truncation test). |
+| 20 | Does the production code reproduce the notebooks? | Yes (point forecast to 0.001 £/MWh, metrics to three decimals); no look-ahead (truncation test). This holds both for the code as scored (commit d8562c0) and after the clock-change fix (section 6), which is in the notebooks and the package alike. |
 
 ## 4. The final procedure (D-008, D-009)
 
@@ -76,11 +77,13 @@ Code: `sip_forecaster/` (`features.py`, `models.py`, `backtest.py`, `__main__.py
 | | MAE | RMSE | bias | top-8 hit | bottom-8 hit | pinball 10% | pinball 90% |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | baseline | 30.20 | 42.23 | +1.9 | 0.462 | 0.322 | 8.24 | 6.37 |
-| model, 09:00 | 27.97 | 37.43 | -0.7 | 0.495 | 0.368 | 5.89 | 6.20 |
-| model, 07:00 | 28.35 | 38.14 | -0.7 | 0.483 | 0.356 | 5.97 | 6.22 |
+| model, 09:00 | 27.96 | 37.43 | -0.7 | 0.494 | 0.368 | 5.87 | 6.20 |
+| model, 07:00 | 28.37 | 38.15 | -0.7 | 0.486 | 0.356 | 5.96 | 6.22 |
 
-(Point metrics over all 17 blocks; pinball over blocks 1-16, since the 90% offset needs an earlier block, 21,501 rows.) The development numbers are optimistic: the
-structure was designed after looking at these same folds (D-008).
+(Point metrics over all 17 blocks, 22,847 rows per cutoff; pinball over blocks 1-16, since the 90% offset needs an earlier block, 21,503 rows. This is
+what the command prints.) The development numbers are optimistic: the structure was designed after looking at these same folds (D-008). They come from
+the current code, after the clock-change fix (section 6). The code as scored on the hold-out gave 27.97 / 0.495 / 0.368 / 5.89 at 09:00 and 28.35 / 0.483 /
+0.356 / 5.97 at 07:00 (MAE / top-8 / bottom-8 / pinball 10%).
 
 ### Final hold-out (56 days, scored once, refit at the start of each 28-day block)
 
@@ -105,11 +108,29 @@ What the hold-out supports:
 
 - 56 hold-out days in two blocks; days are autocorrelated, so the standard errors are optimistic. One higher-priced period is a single regime.
 - The hold-out has now been used. Further changes to the model cannot be validated on it, and anything tuned after seeing it would not be an honest out-of-sample result.
-- The 10% quantile model is sensitive to small input changes (20): a tiny change in a few anomaly values moved individual 10% forecasts by 2-6 £/MWh on average within a block, while the loss measures over many rows were unchanged. Read single 10% forecasts with that noise in mind.
-- Bank holidays are listed by hand for England and Wales through 2026-08-31 and need extending for later dates.
-- A look-ahead error in the first version of notebook 05 (first development day only, `level7`/`level28`) affected no model row and is fixed; the production code and notebook 05 now agree.
+- The 10% quantile model is sensitive to small input changes (20): a tiny change in a few anomaly values moved individual 10% forecasts by 2-3 £/MWh on average within a block (up to about 16), while the loss measures over many rows were unchanged. Read single 10% forecasts with that noise in mind.
+- **Clock-change fix after the hold-out was scored.** In the code as scored (commit d8562c0), the repeated 01:00 and 01:30 of the 50-period autumn
+  clock-change day had no price-history or anomaly features, so those two periods got no forecast (2025-10-26 in the back-test; the hold-out has no
+  clock change). They now use the history of the first 01:00 and 01:30. The hold-out results above are the ones scored with d8562c0 and are not
+  replaced. Re-running the hold-out with the fixed code, only to measure the effect, gives practically the same results (09:00: MAE 44.22, hit
+  0.475 / 0.388, pinball 9.42 / 10.45, bias unchanged). Individual forecasts still moved by about £1.3/MWh on average (up to about £10), from adding 4
+  training rows. The fitted shapes, mainly the gradient-boosting one, are sensitive to small changes in the training data even when aggregate
+  scores are not; read single forecasts with that in mind.
+- Notebooks 04-20 carry the same fix and were re-run in order (2026-11-09). Their findings and the table in section 3 quote the re-run numbers, so
+  some differ slightly from the dated entries in `docs/PROGRESS.md`. No conclusion or design choice changed.
+- **Gradient-boosting comparisons are noisy beyond the fold-to-fold error.** Adding 4 training rows moved paired GBM differences in the notebooks by
+  about 0.1-0.2 MAE (for example the D-005 combined-against-split comparison: GBM at 07:00 -0.13 became -0.18 +/- 0.11). Differences between GBM
+  variants of that size should not be read as real. Huber results did not move.
+- Bank holidays are listed by hand for England and Wales through 2027-12-31; `forecast` warns for later days.
+- A look-ahead error in the first version of notebook 05 (first development day only, `level7`/`level28`) affected no model row and is fixed; the production code and notebook 05 now agree on it.
+- **Timing assumptions not checked against publication logs.**
+  - `level24h` uses the price of the half-hour ending 30 minutes before the cutoff, so it assumes that price is published within 30 minutes. It also
+    uses the prices in this dataset, which may include later settlement revisions rather than the first published value.
+  - Embedded wind and solar forecasts have no receipt time, so their production time (`issued_at`) stands in for publication. If NESO publishes
+    them later, the features are slightly optimistic.
 - Public data only; no outage, interconnector-flow, fuel-price or bid data. The SIP is the outcome of all participants' actions (D-002); competitor behaviour is captured only implicitly.
-- The Docker image and compose file are wired to the script but their build has not been tested.
+- `forecast` takes the 90% offset from all out-of-sample residuals saved so far (the development back-test plus, when present, the refit hold-out),
+  as in the hold-out protocol.
 
 ## 7. Possible next steps
 

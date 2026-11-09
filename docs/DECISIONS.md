@@ -73,3 +73,18 @@ hold-out is its first clean test.
 top-8 / bottom-8 hit 0.471 / 0.395 against 0.464 / 0.379 (not distinguishable from zero), 10% pinball 9.45 against 11.42, 90% pinball
 10.48 against 10.19; intervals too narrow (18.6% below q10, 23.7% above q90). Details and caveats in `docs/REPORT.md`. The hold-out is now
 used; any later change cannot be validated on it.
+
+**D-010 Fixes after the hold-out (review, 2026-11-09)** - accepted
+Bug fixes only, no tuning; the scored hold-out results (D-009, commit d8562c0) stand and are not replaced.
+- Clock change: the repeated 01:00/01:30 of a 50-period day takes its price-history and anomaly features from the first occurrence (they were
+  empty, so those periods had no forecast).
+- `summarise`: point metrics on all rows with a point forecast, quantile metrics on rows with every quantile (the dev back-test printout had
+  dropped block 0 from all metrics).
+- `forecast`: the 90% offset also uses the refit hold-out residuals, as in the D-009 protocol.
+- Bank holidays extended through 2027, with a warning past the list.
+`level24h` is unchanged (periods starting 25 h to 1 h before the cutoff); the docs now describe it exactly.
+The same fix was applied to notebooks 04, 05, 06 and 17, all notebooks were re-run in order, and their findings were updated to the re-run
+numbers. No earlier decision changes. D-005's "MAE within +/-0.15" is now -0.18 to +0.12 (GBM at 07:00 -0.18 +/- 0.11), still within noise,
+so split models stand.
+Why: correctness, without changing the scored model's design. Effect checked by re-running the hold-out once in a scratch directory, only to
+measure it: the aggregate results are practically unchanged (REPORT section 6).

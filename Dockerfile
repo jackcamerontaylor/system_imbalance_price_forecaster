@@ -12,5 +12,5 @@ ENV PATH="/app/.venv/bin:$PATH"
 
 COPY . .
 
-# data mounted at /app/candidate_data; build and run untested
+# data mounted at /app/candidate_data (read-only), results written to /app/outputs
 CMD ["python", "-m", "sip_forecaster", "--help"]

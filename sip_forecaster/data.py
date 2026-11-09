@@ -19,7 +19,9 @@ TABLES = [
 # Final hold-out (D-003): UK days 2026-08-06 .. 2026-09-30. Exploration and model selection used only earlier days.
 TEST_START_DAY = pd.Timestamp("2026-08-06")
 
-# England and Wales bank holidays, listed by hand (no extra dependency); they cover the data range.
+# England and Wales bank holidays, listed by hand (no extra dependency), through BANK_HOLIDAYS_END.
+# Extend the list before forecasting later days (the CLI warns).
+BANK_HOLIDAYS_END = pd.Timestamp("2027-12-31")
 BANK_HOLIDAYS = pd.to_datetime(
     [
         "2024-12-25",
@@ -38,6 +40,16 @@ BANK_HOLIDAYS = pd.to_datetime(
         "2026-05-04",
         "2026-05-25",
         "2026-08-31",
+        "2026-12-25",
+        "2026-12-28",  # Boxing Day (Saturday) substitute
+        "2027-01-01",
+        "2027-03-26",
+        "2027-03-29",
+        "2027-05-03",
+        "2027-05-31",
+        "2027-08-30",
+        "2027-12-27",  # Christmas Day (Saturday) substitute
+        "2027-12-28",  # Boxing Day (Sunday) substitute
     ]
 )
 

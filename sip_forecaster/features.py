@@ -2,7 +2,8 @@
 
 Port of notebook 05. Every value is built from information available at the cutoff:
 - forecasts: the latest vintage whose availability (`received_at`, else `issued_at`) is at or before the cutoff;
-- price history: prices of days D-2 and earlier, plus (level24h) the 24 h of prices ending one hour before the cutoff;
+- price history: prices of days D-2 and earlier, plus (level24h) the median of the periods starting 25 h to 1 h before
+  the cutoff, both ends included (49 half-hours; the latest ends 30 minutes before the cutoff);
 - margin_daily: publications dated D-2 or earlier.
 The target day's own price is attached only as a label (`price`) for training and scoring; no feature reads it.
 """
@@ -128,7 +129,7 @@ def build_features(tables: dict[str, pd.DataFrame], days: pd.DatetimeIndex) -> p
         .to_numpy()
     )
 
-    # --- price history (prices of D-2 and earlier; level24h: the 24 h ending 1 h before the cutoff)
+    # --- price history (prices of D-2 and earlier; level24h: periods starting 25 h .. 1 h before the cutoff)
     pidx = price_all.index
     pday = uk_day(pidx.to_series())
     df = pd.DataFrame(
@@ -147,10 +148,13 @@ def build_features(tables: dict[str, pd.DataFrame], days: pd.DatetimeIndex) -> p
     )
     known = wide.shift(2)  # row D shows the prices of D-2
 
+    # Look up history by clock time only (occurrence 0): the repeated 01:00/01:30 of a 50-period day reads the same
+    # history as the first occurrence. Occurrence-1 columns exist only on clock-change days, so their rolling
+    # medians would always be empty and those two periods would get no forecast.
     gdf = pd.DataFrame(
-        {"day": day_of.to_numpy(), "hhmm": loc.dt.strftime("%H:%M").to_numpy()}, index=grid
+        {"day": day_of.to_numpy(), "hhmm": loc.dt.strftime("%H:%M").to_numpy(), "occ": 0},
+        index=grid,
     )
-    gdf["occ"] = gdf.groupby(["day", "hhmm"]).cumcount()
 
     def to_long(Fm):
         ri = Fm.index.get_indexer(gdf["day"])
@@ -242,7 +246,9 @@ def build_features(tables: dict[str, pd.DataFrame], days: pd.DatetimeIndex) -> p
             w = w.reindex(pd.date_range(w.index.min(), w.index.max(), freq="D"))
             typ = w.shift(2).rolling(28, min_periods=14).mean()
             ri = typ.index.get_indexer(sub["day"])
-            ci = typ.columns.get_indexer(pd.MultiIndex.from_frame(sub[["_hhmm", "_occ"]]))
+            ci = typ.columns.get_indexer(  # by clock time only, as for price history
+                pd.MultiIndex.from_arrays([sub["_hhmm"], np.zeros(len(sub), dtype=int)])
+            )
             out = np.full(len(sub), np.nan)
             ok = (ri >= 0) & (ci >= 0)
             out[ok] = typ.to_numpy()[ri[ok], ci[ok]]

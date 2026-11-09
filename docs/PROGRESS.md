@@ -156,3 +156,61 @@ Frozen (one fit on dev only): 09:00 MAE 44.07, hit 0.471/0.400, pinball 9.22/10.
 - `docs/REPORT.md` written (task, measurement, what was tried by notebook, final procedure, dev and hold-out results, limits, next steps); README updated.
 - Notebook 05 corrected (first-row slice for `level7`/`level28`, 2024-10-01 only; no model row affected) and all notebooks 01-20 re-executed top to bottom in order; package linted (ruff) and the commands re-run.
 - State: project complete for the stated scope; nothing pushed.
+
+## 2026-11-09 - review and fixes (D-010)
+- **Review findings.**
+  - The hold-out and dev numbers in all docs match the saved outputs.
+  - The hold-out reproduces bit for bit from commit d8562c0.
+  - An independent truncation look-ahead test passes: 4 days, both clock changes, both cutoffs.
+  - Notebooks 01-20 ran in order with no errors; ruff is clean.
+- **Fixed.**
+  - The repeated hour of the autumn clock-change day had no forecast (2025-10-26 in the back-test).
+  - The `backtest` printout dropped block 0 from the point metrics, so it disagreed with REPORT.
+  - The `forecast` 90% offset ignored hold-out residuals.
+  - Bank holidays end at 2026-08-31: extended through 2027, with a warning past the list.
+  - The CLAUDE.md working rule was out of date.
+  - The `level24h` description now says the window covers 49 periods.
+  - Timing assumptions for price publication and embedded `issued_at` are now listed in REPORT limits.
+- **Dev back-test re-run.**
+  - Rows are now 22,847 per cutoff.
+  - 09:00: MAE 27.96, hit 0.494 / 0.368. 07:00: MAE 28.37, hit 0.486 / 0.356.
+  - The pre-fix output is kept as `outputs/backtest_dev_d8562c0.parquet`.
+- **Hold-out re-run with the fixed code**, in scratch only, to measure the effect.
+  - 09:00: MAE 44.22 against 44.15 scored, bias unchanged.
+  - Individual forecasts moved by about £1.3/MWh on average from 4 extra training rows, so the shape models are sensitive to training changes.
+- Docker tested (27.4):
+  - The image builds, and `--help`, `backtest`, `forecast` and `docker compose up` all run.
+  - The container back-test matches the local one (point max |diff| 5e-9), and the compose forecast matches too (2e-12).
+- Notebooks: see the entry "notebooks re-run with the clock-change fix" below.
+
+## 2026-11-09 - second review: CLI safety fixes and README
+- `holdout --force` no longer overwrites the scored hold-out files: it re-runs into `outputs/holdout_*_rerun.parquet` and says the
+  current code will not match the scored results (commit d8562c0) exactly.
+- `forecast` warns when the inputs for day D are mostly missing (below 90% coverage of `med28_same`, the weather/demand forecasts or
+  their anomalies, by cutoff), since the models would otherwise impute silently, and it stops with a message when there is no
+  training data (about the first month).
+- The `forecast --day 2026-09-30` output is unchanged (max |diff| 4e-12). No change to features, models or results.
+- README: "Result in brief" now leads with the headline metric fixed in advance (hit rate, not distinguishable from zero), and
+  "What we chose to do, and why" moved above Setup.
+- Note: "ruff is clean" in earlier entries means the package; `ruff check .` still flags notebook imports.
+- Open (resolved in the next entry): notebooks 01-06 and `outputs/feature_table_dev.parquet` were re-run after 07-20 saved their
+  predictions; check that 07-20 still match before relying on them.
+
+## 2026-11-09 - notebooks re-run with the clock-change fix
+- **Fix and re-run.**
+  - Notebooks 04, 05, 06 and 17 now look up history by clock time only, as the package does (D-010). The brute-force anomaly check in 05
+    uses the same rule.
+  - All notebooks 01-20 were re-run in order from the repo root, so 07-20 now read the fixed feature table: no errors, all asserts pass.
+- **Notebook 20 parity holds again.**
+  - Package and notebook-18 point forecasts agree (mean |diff| 0.001), and metrics agree to three decimals (09:00 MAE 27.963).
+  - The q10 forecasts are identical in blocks 0-9. In blocks 10-16 they differ by 2-3 on average, from the known 2026-01-18 12:30 difference.
+- **Findings updated** in 07-12 and 14-20 to the re-run outputs. 01-06 and 13 needed no change at the precision quoted.
+  - Several findings had already disagreed with their own committed output before this run, for example 09's seed std (0.035 against
+    0.12) and 10's fold-16 error.
+  - Huber results did not move. GBM results moved by about 0.1-0.2 MAE in paired differences.
+  - No conclusion changed. The blend is still best or tied (09:00 MAE -2.24, 07:00 -1.83); split beats combined is still not shown either
+    way; nested selection still does not help; GBM is still the better single family at 07:00.
+  - Small wording changes: at 90% the 07:00 and 09:00 quantile pinball are now about equal (6.43 against 6.44), and R's top-8 loss in 19
+    is now about one standard error at both cutoffs.
+- **Docs.** REPORT section 3 table (07-09, 18), the parity row and section 6 limits, D-010 and CLAUDE.md updated. The earlier dated
+  entries above keep their original numbers.

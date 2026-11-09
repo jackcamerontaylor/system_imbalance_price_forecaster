@@ -4,7 +4,7 @@ block's first day D, as in production), predict the block, and derive the 90% qu
 import numpy as np
 import pandas as pd
 
-from .evaluate import make_folds, score
+from .evaluate import make_folds, pinball, score
 from .features import CUTOFF_HOURS
 from .models import fit, predict
 
@@ -72,20 +72,31 @@ def holdout_blocks(test_start: pd.Timestamp, last_day: pd.Timestamp, block: int 
 
 
 def summarise(P: pd.DataFrame, by_block: bool = False) -> pd.DataFrame:
-    """Metrics of the point forecast, the 28-day-median baseline and the quantile forecasts, per cutoff (rows with all values)."""
+    """Metrics of the point forecast, the 28-day-median baseline and the quantile forecasts, per cutoff.
+
+    Point metrics (`n` rows) use every row with a price, a point forecast and ref28. Quantile metrics (`n_q` rows) use
+    only rows that also have all four quantiles, so model and baseline are scored on the same rows; in the development
+    back-test that excludes block 0, which has no earlier residuals for the 90% offset.
+    """
+    point_cols = ["price", "point", "ref28"]
+    q_cols = ["q10", "q90", "q10_28", "q90_28"]
     rows = {}
     for cutoff, g in P.groupby("cutoff_hour"):
-        g = g.dropna(subset=["price", "point", "ref28", "q10", "q90", "q10_28", "q90_28"])
+        g = g.dropna(subset=point_cols)
         groups = [("all", g)] + (
             [(f"block {b}", x) for b, x in g.groupby("block")] if by_block else []
         )
         for label, d in groups:
-            s = score(d, "point", q10="q10", q90="q90")
-            b = score(d, "ref28", q10="q10_28", q90="q90_28")
-            for name, x in (("model", s), ("baseline", b)):
-                x = dict(x)
-                q10c, q90c = ("q10", "q90") if name == "model" else ("q10_28", "q90_28")
-                x["below_q10"] = (d["price"] < d[q10c]).mean()
-                x["above_q90"] = (d["price"] > d[q90c]).mean()
+            dq = d.dropna(subset=q_cols)
+            for name, pred, q10c, q90c in (
+                ("model", "point", "q10", "q90"),
+                ("baseline", "ref28", "q10_28", "q90_28"),
+            ):
+                x = dict(score(d, pred))
+                x["n_q"] = len(dq)
+                x["pinball10"] = pinball(dq["price"], dq[q10c], 0.1) if len(dq) else np.nan
+                x["pinball90"] = pinball(dq["price"], dq[q90c], 0.9) if len(dq) else np.nan
+                x["below_q10"] = (dq["price"] < dq[q10c]).mean() if len(dq) else np.nan
+                x["above_q90"] = (dq["price"] > dq[q90c]).mean() if len(dq) else np.nan
                 rows[(f"{cutoff:02d}:00", label, name)] = x
     return pd.DataFrame(rows).T

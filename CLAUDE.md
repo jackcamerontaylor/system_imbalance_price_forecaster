@@ -9,8 +9,9 @@ Python, managed with **uv**; eventually runnable as a script via Docker/compose.
 Brief: `docs/BRIEF.md`. Data catalogue: `candidate_data/README.md`.
 
 ## Working rules
-- **Do only what the user asks.** Currently: exploration in `notebooks/`. Do not write modelling
-  code, packages or tests unprompted.
+- **Do only what the user asks.** Exploration and model comparison live in `notebooks/` (a record of the
+  work; re-run in order after the clock-change fix, D-010). The production code is `sip_forecaster/`. Do not add
+  modelling code, packages or tests unprompted.
 - Raw timestamps are UTC; "day" and run times are UK local (`Europe/London`). Clock-change days
   have 46/50 periods.
 - Avoid look-ahead: only use information available at the run cutoff.

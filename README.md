@@ -9,9 +9,13 @@ the CSV copies are git-ignored.
 ## Result in brief
 
 The forecast is the 28-day same-clock-time median plus a daily level adjustment plus an equal blend of a Huber and a gradient-boosting
-within-day shape, with 10% and 90% quantiles. On the 56-day hold-out (scored once) it lowers MAE from 48.4 to 44.2 (09:00) and 44.7 (07:00)
-and RMSE from 62.6 to 55.4 / 56.2. The improvement in picking the best and worst half-hours of a day is small and not statistically
-distinguishable from zero, the 10% quantile beats the baseline on pinball loss, and the 90% quantile does not (both intervals are too narrow).
+within-day shape, with 10% and 90% quantiles. On the 56-day hold-out (scored once):
+
+- **Headline metric (fixed in advance, D-004): not clearly improved.** Picking the day's 8 highest / lowest half-hours improves on the
+  baseline by +0.007 / +0.016 at 09:00, which is not distinguishable from zero (development folds suggested +0.033 / +0.046).
+- **Average accuracy improves reliably.** MAE falls from 48.4 to 44.2 (09:00) and 44.7 (07:00), and RMSE from 62.6 to 55.4 / 56.2.
+- **Quantiles are mixed.** The 10% quantile beats the baseline on pinball loss, the 90% quantile does not, and both intervals are too narrow.
+
 Full method, tables and caveats: [`docs/REPORT.md`](docs/REPORT.md).
 
 ### Hold-out results (56 UK days, 2026-08-06 to 2026-09-30, scored once)
@@ -26,50 +30,9 @@ empirical 10% / 90% quantiles. Top-8 / bottom-8 hit is the share of the day's 8 
 | model, 09:00 | 44.15 | 55.44 | 0.471 | 0.395 | 9.45 | 10.48 | 18.6% | 23.7% |
 | model, 07:00 | 44.69 | 56.22 | 0.478 | 0.402 | 10.04 | 10.77 | 18.8% | 23.8% |
 
-MAE and RMSE are in £/MWh. The MAE gain is reliable (better on 41 of 56 days at 09:00). The ranking gain is not distinguishable
-from zero. The 90% quantile is worse than the baseline's. Development back-test numbers, bias and caveats are in
+MAE and RMSE are in £/MWh. The ranking gain (the headline metric) is not distinguishable from zero. The MAE gain is reliable (better
+on 41 of 56 days at 09:00). The 90% quantile is worse than the baseline's. Development back-test numbers, bias and caveats are in
 [`docs/REPORT.md`](docs/REPORT.md).
-
-## Setup
-
-```bash
-uv sync
-```
-
-## Usage
-
-```bash
-uv run python -m sip_forecaster backtest                  # development back-test (17 blocks of 28 days) -> outputs/backtest_dev.parquet
-uv run python -m sip_forecaster forecast --day 2026-09-30 # both cutoffs: 48 half-hours each, point + 10% + 90% quantiles
-uv run python -m sip_forecaster holdout                   # score the final hold-out, once (refuses to overwrite earlier results)
-uv run python -m sip_forecaster features                  # write the full point-in-time feature table -> outputs/features_all.parquet
-```
-
-`forecast` trains on all days labelled up to D-2 and uses only information available at 07:00 and 09:00 UK on D-1.
-The 90% quantile needs `outputs/backtest_dev.parquet` (out-of-sample residuals); run `backtest` first.
-
-## Running with Docker
-
-The image installs the locked dependencies with uv and copies the code; the data is mounted at run time, and results are
-written to `./outputs` on the host. **The image build and these commands have not been tested** (the Docker daemon was
-not available when this was written), so treat them as the intended path.
-
-```bash
-docker compose build
-
-# 1. Development back-test (about 17 blocks x 2 cutoffs of model fits). Writes outputs/backtest_dev.parquet,
-#    whose out-of-sample residuals the 90% quantile needs.
-docker compose run --rm forecast python -m sip_forecaster backtest
-
-# 2. Forecast one UK day (both cutoffs). Writes outputs/forecast_<day>.parquet
-docker compose run --rm forecast python -m sip_forecaster forecast --day 2026-09-30
-
-# Optional: one cutoff only, print the table, hide the realised price
-docker compose run --rm forecast python -m sip_forecaster forecast --day 2026-09-30 --cutoff 9 --print --drop-price
-```
-
-Running `docker compose up` executes only the default command in `docker-compose.yml` (step 2 for 2026-09-30), so run
-step 1 first. The data directory must exist at `./candidate_data` (Parquet files); the CSV copies are not needed.
 
 ## What we chose to do, and why
 
@@ -77,7 +40,7 @@ Each choice is recorded in [`docs/DECISIONS.md`](docs/DECISIONS.md); the evidenc
 [`docs/REPORT.md`](docs/REPORT.md).
 
 1. **No look-ahead by construction.** For each target half-hour and each cutoff (07:00 or 09:00 UK on D-1), use the latest
-   forecast vintage available at the cutoff, prices up to D-2 plus the 24 hours ending one hour before the cutoff, and
+   forecast vintage available at the cutoff, prices up to D-2 plus the half-hours starting 25 to 1 hours before the cutoff, and
    margin publications dated D-2 or earlier (notebooks 03, 05; tested again on the production code in 20).
 2. **Hold out the last 8 weeks** (2026-08-06 to 2026-09-30) and score them once at the end (D-003).
 3. **Judge by within-day ranking first.** The headline metric is how many of the day's 8 highest (lowest) half-hours the
@@ -96,6 +59,55 @@ Each choice is recorded in [`docs/DECISIONS.md`](docs/DECISIONS.md); the evidenc
 9. **Refit at the start of every 28-day block**, on days up to the block's first day minus 2 (D-008, D-009).
 10. **Feature selection inside each fold did not help**, so the full feature set is used (19).
 
+## Setup
+
+```bash
+uv sync
+```
+
+## Usage
+
+```bash
+uv run python -m sip_forecaster backtest                  # development back-test (17 blocks of 28 days) -> outputs/backtest_dev.parquet
+uv run python -m sip_forecaster forecast --day 2026-09-30 # both cutoffs: 48 half-hours each, point + 10% + 90% quantiles
+uv run python -m sip_forecaster holdout                   # score the final hold-out, once (never overwrites the scored results)
+uv run python -m sip_forecaster features                  # write the full point-in-time feature table -> outputs/features_all.parquet
+```
+
+`forecast` trains on all days labelled up to D-2 and uses only information available at 07:00 and 09:00 UK on D-1.
+The 90% quantile needs out-of-sample residuals: `outputs/backtest_dev.parquet` (run `backtest` first), plus
+`outputs/holdout_refit.parquet` when present. It warns when the inputs for day D are mostly missing (for example a day
+beyond the forecast data: the models would otherwise fill the gaps silently), and stops when there is no training data
+(about the first month of data).
+
+The hold-out results were scored with commit `d8562c0`. A later fix (forecasts for the repeated hour of the autumn
+clock-change day) changes individual forecasts slightly, so reproducing the hold-out exactly needs that commit; see
+`docs/REPORT.md`, section 6. `holdout --force` re-runs it with the current code into `outputs/holdout_*_rerun.parquet`
+and leaves the scored files untouched.
+
+## Running with Docker
+
+The image installs the locked dependencies with uv and copies the code; the data is mounted at run time, and results are
+written to `./outputs` on the host. Tested with Docker 27.4: the build, `backtest`, `forecast` and `docker compose up`
+reproduce the local results to floating-point rounding.
+
+```bash
+docker compose build
+
+# 1. Development back-test (about 17 blocks x 2 cutoffs of model fits). Writes outputs/backtest_dev.parquet,
+#    whose out-of-sample residuals the 90% quantile needs.
+docker compose run --rm forecast python -m sip_forecaster backtest
+
+# 2. Forecast one UK day (both cutoffs). Writes outputs/forecast_<day>.parquet
+docker compose run --rm forecast python -m sip_forecaster forecast --day 2026-09-30
+
+# Optional: one cutoff only, print the table, hide the realised price
+docker compose run --rm forecast python -m sip_forecaster forecast --day 2026-09-30 --cutoff 9 --print --drop-price
+```
+
+Running `docker compose up` executes only the default command in `docker-compose.yml` (step 2 for 2026-09-30), so run
+step 1 first. The data directory must exist at `./candidate_data` (Parquet files); the CSV copies are not needed.
+
 ## Model architecture
 
 The same pipeline runs once per cutoff (07:00 and 09:00); only the inputs listed in the 07:00 note differ.
@@ -103,7 +115,7 @@ The same pipeline runs once per cutoff (07:00 and 09:00); only the inputs listed
 ```mermaid
 flowchart TD
     subgraph IN["Inputs (public data, vintages at or before the cutoff)"]
-        P["Price history<br/>D-2 and earlier + 24 h ending 1 h before cutoff"]
+        P["Price history<br/>D-2 and earlier + periods starting 25 h to 1 h before cutoff"]
         W["Wind, embedded wind and solar forecasts"]
         Dm["Demand forecast<br/>(09:00 model only)"]
         M["Daily margin forecasts (D-2 or earlier)"]
@@ -152,5 +164,5 @@ Notes on the diagram:
 | `candidate_data/` | Input data (Parquet) |
 | `outputs/` | Generated results (git-ignored) |
 | `docs/` | Brief, decision log, progress log, final report (`REPORT.md`) |
-| `Dockerfile`, `docker-compose.yml` | Container run of the forecasting script (build untested) |
+| `Dockerfile`, `docker-compose.yml` | Container run of the forecasting script |
 | `CLAUDE.md` | Working context for AI-assisted sessions |
